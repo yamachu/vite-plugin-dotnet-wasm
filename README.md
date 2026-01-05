@@ -30,6 +30,8 @@ export default defineConfig({
 });
 ```
 
+And, see example project in the `examples/` folder.
+
 ## LICENSE
 
 MIT
