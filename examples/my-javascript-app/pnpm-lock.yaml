@@ -17,6 +17,9 @@ importers:
       vite:
         specifier: npm:rolldown-vite@7.2.5
         version: rolldown-vite@7.2.5
+      vite-plugin-dotnet-wasm:
+        specifier: link:../..
+        version: link:../..
 
 packages:
 
