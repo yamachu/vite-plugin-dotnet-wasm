@@ -266,6 +266,8 @@ export default function vitePluginDotnetWasm(
         return;
       }
 
+      // FIXME: Improve the rewriting logic to handle various import styles more robustly...
+      // TODO: Add tests for this rewriting logic.
       for (const fileName of Object.keys(bundle)) {
         const chunk = bundle[fileName];
         if (chunk && chunk.type === "chunk" && typeof chunk.code === "string") {
