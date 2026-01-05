@@ -25,6 +25,12 @@ export interface VitePluginDotnetWasmOptions {
    */
   watch?: boolean;
   /**
+   * Whether to keep the relative path to ./_framework/dotnet.js in import statements.
+   * If false, the path will be handled by Vite's bundle output method.
+   * @default true
+   */
+  keepDotnetScriptRelative?: boolean;
+  /**
    * Additional arguments to pass to the 'dotnet build' command.
    */
   dotnetBuildArgs?: string[];
@@ -106,6 +112,7 @@ export default function vitePluginDotnetWasm(
     projectPath,
     configuration = "Release",
     watch: watchOption,
+    keepDotnetScriptRelative = true,
     dotnetBuildArgs,
     frameworkPathAlias = (wwwroot) => ({
       "./_framework": resolve(wwwroot, "_framework"),
@@ -223,7 +230,7 @@ export default function vitePluginDotnetWasm(
         }
       });
     },
-    async generateBundle() {
+    async generateBundle(options, bundle) {
       const distFramework = resolve(
         config.root,
         config.build.outDir,
@@ -253,6 +260,41 @@ export default function vitePluginDotnetWasm(
         );
       } catch (e) {
         console.error(`[vite-plugin-dotnet-wasm] Failed to copy framework:`, e);
+      }
+
+      if (!keepDotnetScriptRelative) {
+        return;
+      }
+
+      for (const fileName of Object.keys(bundle)) {
+        const chunk = bundle[fileName];
+        if (chunk && chunk.type === "chunk" && typeof chunk.code === "string") {
+          let newCode = chunk.code;
+
+          // rewrite: import ... from "..."
+          newCode = newCode.replace(
+            /(import\s*[^;]*?from\s*)(["'])([^"']*_framework\/dotnet\.js)\2/g,
+            (match, p1, quote, importPath) => {
+              if (!importPath.startsWith("./_framework/dotnet.js")) {
+                return p1 + quote + "./_framework/dotnet.js" + quote;
+              }
+              return match;
+            }
+          );
+          // rewrite: import("..._framework/dotnet.js")
+          newCode = newCode.replace(
+            /(import\s*\(\s*)(["'])([^"']*_framework\/dotnet\.js)\2(\s*\))/g,
+            (match, p1, quote, importPath, p4) => {
+              if (!importPath.startsWith("./_framework/dotnet.js")) {
+                return p1 + quote + "./_framework/dotnet.js" + quote + p4;
+              }
+              return match;
+            }
+          );
+          if (newCode !== chunk.code) {
+            chunk.code = newCode;
+          }
+        }
       }
     },
     async closeBundle() {
