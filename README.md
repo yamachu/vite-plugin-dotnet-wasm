@@ -6,7 +6,7 @@ It supports building and serving .NET WebAssembly projects with Vite.
 ## Installation
 
 ```bash
-pnpm add -D vite-plugin-dotnet-wasm
+pnpm add -D @yamachu/vite-plugin-dotnet-wasm
 ```
 
 ## Usage
@@ -14,7 +14,7 @@ pnpm add -D vite-plugin-dotnet-wasm
 ```ts
 // vite.config.ts
 import { defineConfig } from "vite";
-import dotnetWasm from "vite-plugin-dotnet-wasm";
+import dotnetWasm from "@yamachu/vite-plugin-dotnet-wasm";
 
 export default defineConfig({
   plugins: [

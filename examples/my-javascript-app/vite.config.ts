@@ -1,5 +1,5 @@
 import { defineConfig } from "vite";
-import dotnetWasm from "vite-plugin-dotnet-wasm";
+import dotnetWasm from "@yamachu/vite-plugin-dotnet-wasm";
 
 export default defineConfig({
   plugins: [

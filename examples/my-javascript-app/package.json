@@ -9,9 +9,9 @@
     "preview": "vite preview"
   },
   "devDependencies": {
+    "@yamachu/vite-plugin-dotnet-wasm": "link:../..",
     "typescript": "~5.9.3",
-    "vite": "npm:rolldown-vite@7.2.5",
-    "vite-plugin-dotnet-wasm": "link:../.."
+    "vite": "npm:rolldown-vite@7.2.5"
   },
   "pnpm": {
     "overrides": {

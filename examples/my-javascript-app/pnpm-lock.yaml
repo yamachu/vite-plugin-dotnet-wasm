@@ -11,15 +11,15 @@ importers:
 
   .:
     devDependencies:
+      '@yamachu/vite-plugin-dotnet-wasm':
+        specifier: link:../..
+        version: link:../..
       typescript:
         specifier: ~5.9.3
         version: 5.9.3
       vite:
         specifier: npm:rolldown-vite@7.2.5
         version: rolldown-vite@7.2.5
-      vite-plugin-dotnet-wasm:
-        specifier: link:../..
-        version: link:../..
 
 packages:
 
