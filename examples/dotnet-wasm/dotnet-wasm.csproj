@@ -3,4 +3,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net11.0'">
+    <WasmEmitTypeScriptDefinitions>true</WasmEmitTypeScriptDefinitions>
+  </PropertyGroup>
 </Project>
