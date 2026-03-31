@@ -1,0 +1,180 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+:root {
+  --color-bg: #0f0f0f;
+  --color-surface: #1a1a1a;
+  --color-border: #2d2d2d;
+  --color-text: #ebebeb;
+  --color-text-muted: #888;
+  --color-accent: #646cff;
+  --color-accent-hover: #535bf2;
+  --color-success: #4ade80;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  margin: 0;
+  line-height: 1.6;
+}
+
+header {
+  text-align: center;
+  padding: 4rem 2rem 3rem;
+  border-bottom: 1px solid var(--color-border);
+}
+
+header h1 {
+  font-size: 2.5rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  font-family: var(--font-mono);
+  color: var(--color-accent);
+}
+
+.tagline {
+  color: var(--color-text-muted);
+  margin: 0 0 1.5rem;
+  font-size: 1.1rem;
+}
+
+.github-link {
+  display: inline-block;
+  padding: 0.5rem 1.25rem;
+  background: var(--color-surface);
+  color: var(--color-text);
+  text-decoration: none;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  transition: border-color 0.2s;
+}
+
+.github-link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 2rem 4rem;
+}
+
+.demo-section {
+  padding: 3rem 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.demo-section h2 {
+  margin-top: 0;
+  font-size: 1.5rem;
+  color: var(--color-success);
+}
+
+.demo-description {
+  color: var(--color-text-muted);
+  margin-bottom: 2rem;
+}
+
+.stopwatch {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 2rem;
+  display: inline-block;
+  min-width: 320px;
+}
+
+.time-display {
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+}
+
+.time-display span {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-success);
+  display: block;
+  margin-top: 0.25rem;
+}
+
+.controls {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn {
+  padding: 0.5rem 1.25rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.btn:hover {
+  opacity: 0.85;
+}
+
+.btn-primary {
+  background: var(--color-accent);
+  color: #fff;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.readme-section {
+  padding: 3rem 0;
+}
+
+.readme-content h1 {
+  font-size: 1.8rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.5rem;
+}
+
+.readme-content h2 {
+  font-size: 1.4rem;
+  margin-top: 2rem;
+  border-bottom: 1px solid var(--color-border);
+  padding-bottom: 0.3rem;
+}
+
+.readme-content pre {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  overflow-x: auto;
+}
+
+.readme-content code {
+  font-family: var(--font-mono);
+  font-size: 0.88rem;
+}
+
+.readme-content p code,
+.readme-content li code {
+  background: var(--color-surface);
+  padding: 0.1em 0.4em;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.readme-content a {
+  color: var(--color-accent);
+}
+
+.readme-content a:hover {
+  color: var(--color-accent-hover);
+}
