@@ -189,7 +189,7 @@ export default function vitePluginDotnetWasm(
       server = viteServer;
 
       dotnetProcess = createDotnetBuildProcess(
-        projectPath,
+        projectFile,
         projectRoot,
         configuration,
         watchOption ?? config.command === "serve",
