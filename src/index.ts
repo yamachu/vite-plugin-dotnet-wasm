@@ -189,7 +189,7 @@ export default function vitePluginDotnetWasm(
       server = viteServer;
 
       dotnetProcess = createDotnetBuildProcess(
-        projectPath,
+        projectFile,
         projectRoot,
         configuration,
         watchOption ?? config.command === "serve",
@@ -239,16 +239,35 @@ export default function vitePluginDotnetWasm(
       );
 
       try {
-        await new Promise((resolve) => {
-          createDotnetBuildProcess(
+        await new Promise((resolve, reject) => {
+          const proc = createDotnetBuildProcess(
             projectFile,
             projectRoot,
             configuration,
             false,
             dotnetBuildArgs
-          ).on("close", (code) => {
-            resolve({});
+          );
+          proc.stdout?.on("data", (_) => {});
+          proc.stderr?.on("data", (data) => {
+            console.error(
+              `[vite-plugin-dotnet-wasm] Initial dotnet build error: ${data.toString()}`,
+            );
           });
+          proc
+            .on("close", (code) => {
+              console.log(
+                `Initial dotnet build process exited with code ${code}`,
+              );
+              if (code === 0) {
+                resolve({});
+              } else {
+                reject(new Error(`dotnet build failed with exit code ${code}`));
+              }
+            })
+            .on("error", (err) => {
+              console.error(`Initial dotnet build process error: ${err}`);
+              reject(err);
+            });
         });
 
         await cp(resolve(wwwroot, "_framework"), distFramework, {
