@@ -1,5 +1,5 @@
 <Project>
   <Target Name="PrintWwwroot">
-    <Message Importance="High" Text="wwwroot path: bin\$(Configuration)\$(TargetFramework)\wwwroot" />
+    <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/wwwroot" />
   </Target>
 </Project>
