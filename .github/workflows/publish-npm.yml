@@ -1,0 +1,44 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. '0.1.0', '1.0.0')"
+        required: true
+
+# see: https://docs.npmjs.com/trusted-publishers#step-2-configure-your-cicd-workflow
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.inputs.tag }}
+
+      - name: Verify version consistency
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.inputs.tag }}"
+          TAG_VERSION="${TAG}"
+          if [ "$PACKAGE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: package.json version ($PACKAGE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+
+      - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v5.0.0
+        with:
+          cache: true
+          run_install: false
+          package_json_file: package.json
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: "24"
+          cache: "pnpm"
+
+      - run: pnpm install
+      - run: npm publish --access public --no-git-checks
