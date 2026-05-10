@@ -264,7 +264,7 @@ export default function vitePluginDotnetWasm(
             proc
               .on("close", (code) => {
                 console.log(
-                  `Initial dotnet build process exited with code ${code}`,
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process exited with code ${code}`,
                 );
                 if (code === 0) {
                   resolve({});
@@ -275,7 +275,9 @@ export default function vitePluginDotnetWasm(
                 }
               })
               .on("error", (err) => {
-                console.error(`Initial dotnet build process error: ${err}`);
+                console.error(
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process error: ${err}`
+                );
                 reject(err);
               });
           });
