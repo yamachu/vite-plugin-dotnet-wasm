@@ -25,6 +25,7 @@ export default defineConfig({
       configuration: "Release",
       dotnetBuildArgs: [/* Additional arguments for dotnet build, default: undefined */],
       watch: true, // Enable watch mode (dotnet watch build), if you want to build once and without watching .NET files changes, set to false
+      noBuild: false, // Skip dotnet build and only copy prebuilt _framework files
     }),
   ],
 });
