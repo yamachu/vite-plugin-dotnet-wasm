@@ -264,7 +264,7 @@ export default function vitePluginDotnetWasm(
             proc
               .on("close", (code) => {
                 console.log(
-                  `[vite-plugin-dotnet-wasm] Initial dotnet build process exited with code ${code}`,
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process completed with code ${code}`,
                 );
                 if (code === 0) {
                   resolve({});
