@@ -35,6 +35,11 @@ export interface VitePluginDotnetWasmOptions {
    */
   dotnetBuildArgs?: string[];
   /**
+   * Whether to skip running 'dotnet build' and only copy prebuilt binaries.
+   * @default false
+   */
+  noBuild?: boolean;
+  /**
    * Alias for the framework path used in module resolution.
    * @default (wwwroot) => ({ "./_framework": resolve(wwwroot, "_framework") })
    */
@@ -114,6 +119,7 @@ export default function vitePluginDotnetWasm(
     watch: watchOption,
     keepDotnetScriptRelative = true,
     dotnetBuildArgs,
+    noBuild = false,
     frameworkPathAlias = (wwwroot) => ({
       "./_framework": resolve(wwwroot, "_framework"),
     }),
@@ -184,6 +190,7 @@ export default function vitePluginDotnetWasm(
     },
 
     async configureServer(viteServer) {
+      if (noBuild) return;
       if (dotnetProcess) return;
 
       server = viteServer;
@@ -239,36 +246,46 @@ export default function vitePluginDotnetWasm(
       );
 
       try {
-        await new Promise((resolve, reject) => {
-          const proc = createDotnetBuildProcess(
-            projectFile,
-            projectRoot,
-            configuration,
-            false,
-            dotnetBuildArgs
-          );
-          proc.stdout?.on("data", (_) => {});
-          proc.stderr?.on("data", (data) => {
-            console.error(
-              `[vite-plugin-dotnet-wasm] Initial dotnet build error: ${data.toString()}`,
+        if (!noBuild) {
+          await new Promise((resolve, reject) => {
+            const proc = createDotnetBuildProcess(
+              projectFile,
+              projectRoot,
+              configuration,
+              false,
+              dotnetBuildArgs
             );
-          });
-          proc
-            .on("close", (code) => {
-              console.log(
-                `Initial dotnet build process exited with code ${code}`,
+            proc.stdout?.on("data", (_) => {});
+            proc.stderr?.on("data", (data) => {
+              console.error(
+                `[vite-plugin-dotnet-wasm] Initial dotnet build error: ${data.toString()}`,
               );
-              if (code === 0) {
-                resolve({});
-              } else {
-                reject(new Error(`dotnet build failed with exit code ${code}`));
-              }
-            })
-            .on("error", (err) => {
-              console.error(`Initial dotnet build process error: ${err}`);
-              reject(err);
             });
-        });
+            proc
+              .on("close", (code) => {
+                console.log(
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process completed with code ${code}`,
+                );
+                if (code === 0) {
+                  resolve({});
+                } else {
+                  reject(
+                    new Error(`dotnet build failed with exit code ${code}`),
+                  );
+                }
+              })
+              .on("error", (err) => {
+                console.error(
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process error: ${err}`
+                );
+                reject(err);
+              });
+          });
+        } else {
+          console.log(
+            `[vite-plugin-dotnet-wasm] Skipping dotnet build because noBuild=true`
+          );
+        }
 
         await cp(resolve(wwwroot, "_framework"), distFramework, {
           recursive: true,
