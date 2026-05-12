@@ -1,4 +1,5 @@
 name: Publish to npm
+run-name: Publish ${{ github.event.inputs.tag }} to npm
 
 on:
   workflow_dispatch:
