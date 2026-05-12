@@ -2,4 +2,7 @@
   <Target Name="PrintWwwroot">
     <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/wwwroot" />
   </Target>
+  <Target Name="PrintPublishWwwroot">
+    <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/publish/wwwroot" />
+  </Target>
 </Project>
