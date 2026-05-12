@@ -35,6 +35,12 @@ export interface VitePluginDotnetWasmOptions {
    */
   dotnetBuildArgs?: string[];
   /**
+   * Whether to run 'dotnet publish' instead of 'dotnet build'.
+   * When true, the wwwroot path will be resolved from the publish output.
+   * @default false
+   */
+  publish?: boolean;
+  /**
    * Whether to skip running 'dotnet build' and only copy prebuilt binaries.
    * @default false
    */
@@ -51,10 +57,12 @@ const createDotnetBuildProcess = (
   projectPath: string,
   configuration: string,
   watch: boolean,
-  optionalArgs?: string[]
+  publish: boolean,
+  optionalArgs?: string[],
 ): ChildProcess => {
+  const subcommand = publish ? "publish" : "build";
   const args = [
-    "build",
+    subcommand,
     projectFile,
     "--configuration",
     configuration,
@@ -73,8 +81,14 @@ const createDotnetBuildProcess = (
   });
 };
 
-const getWwwRootPath = (projectPath: string, configuration: string): string => {
+const getWwwRootPath = (
+  projectPath: string,
+  configuration: string,
+  publish: boolean,
+): string => {
   const cwd = process.cwd();
+
+  const target = publish ? "PrintPublishWwwroot" : "PrintWwwroot";
 
   const { error, output } = spawnSync(
     "dotnet",
@@ -83,14 +97,14 @@ const getWwwRootPath = (projectPath: string, configuration: string): string => {
       projectPath,
       `-property:Configuration=${configuration}`,
       `-property:CustomAfterMicrosoftCommonTargets=${dumpTargets}`,
-      "-t:PrintWwwroot",
+      `-t:${target}`,
       "-v:d",
     ],
     {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       shell: true,
-    }
+    },
   );
   if (error) {
     throw error;
@@ -111,7 +125,7 @@ const getWwwRootPath = (projectPath: string, configuration: string): string => {
 };
 
 export default function vitePluginDotnetWasm(
-  options: VitePluginDotnetWasmOptions
+  options: VitePluginDotnetWasmOptions,
 ): Plugin {
   const {
     projectPath,
@@ -120,6 +134,7 @@ export default function vitePluginDotnetWasm(
     keepDotnetScriptRelative = true,
     dotnetBuildArgs,
     noBuild = false,
+    publish = false,
     frameworkPathAlias = (wwwroot) => ({
       "./_framework": resolve(wwwroot, "_framework"),
     }),
@@ -138,10 +153,10 @@ export default function vitePluginDotnetWasm(
 
     config(prevConfig) {
       try {
-        wwwroot = getWwwRootPath(projectPath, configuration);
+        wwwroot = getWwwRootPath(projectPath, configuration, publish);
       } catch (e) {
         console.error(
-          `[vite-plugin-dotnet-wasm] Failed to detect wwwroot path: ${e}`
+          `[vite-plugin-dotnet-wasm] Failed to detect wwwroot path: ${e}`,
         );
       }
 
@@ -171,15 +186,15 @@ export default function vitePluginDotnetWasm(
               prevExternal === undefined
                 ? [/^\.\/_framework\//]
                 : Array.isArray(prevExternal)
-                ? [...prevExternal, /^\.\/_framework\//]
-                : typeof prevExternal === "function"
-                ? (source, importer, isResolved) => {
-                    return (
-                      prevExternal(source, importer, isResolved) ||
-                      /^\.\/_framework\//.test(source)
-                    );
-                  }
-                : [prevExternal, /^\.\/_framework\//],
+                  ? [...prevExternal, /^\.\/_framework\//]
+                  : typeof prevExternal === "function"
+                    ? (source, importer, isResolved) => {
+                        return (
+                          prevExternal(source, importer, isResolved) ||
+                          /^\.\/_framework\//.test(source)
+                        );
+                      }
+                    : [prevExternal, /^\.\/_framework\//],
           },
         },
       };
@@ -200,7 +215,8 @@ export default function vitePluginDotnetWasm(
         projectRoot,
         configuration,
         watchOption ?? config.command === "serve",
-        dotnetBuildArgs
+        publish,
+        dotnetBuildArgs,
       );
 
       dotnetProcess.stdout?.on("data", (data) => {
@@ -213,7 +229,7 @@ export default function vitePluginDotnetWasm(
 
         if (text.includes("Waiting for a file to change before restarting")) {
           console.log(
-            `[vite-plugin-dotnet-wasm] Build succeeded, triggering Vite server reload...`
+            `[vite-plugin-dotnet-wasm] Build succeeded, triggering Vite server reload...`,
           );
           server.ws.send({
             type: "full-reload",
@@ -242,7 +258,7 @@ export default function vitePluginDotnetWasm(
         config.root,
         config.build.outDir,
         config.build.assetsDir,
-        "_framework"
+        "_framework",
       );
 
       try {
@@ -253,7 +269,8 @@ export default function vitePluginDotnetWasm(
               projectRoot,
               configuration,
               false,
-              dotnetBuildArgs
+              publish,
+              dotnetBuildArgs,
             );
             proc.stdout?.on("data", (_) => {});
             proc.stderr?.on("data", (data) => {
@@ -276,14 +293,14 @@ export default function vitePluginDotnetWasm(
               })
               .on("error", (err) => {
                 console.error(
-                  `[vite-plugin-dotnet-wasm] Initial dotnet build process error: ${err}`
+                  `[vite-plugin-dotnet-wasm] Initial dotnet build process error: ${err}`,
                 );
                 reject(err);
               });
           });
         } else {
           console.log(
-            `[vite-plugin-dotnet-wasm] Skipping dotnet build because noBuild=true`
+            `[vite-plugin-dotnet-wasm] Skipping dotnet build because noBuild=true`,
           );
         }
 
@@ -292,7 +309,7 @@ export default function vitePluginDotnetWasm(
         });
 
         console.log(
-          `[vite-plugin-dotnet-wasm] Copied framework to ${distFramework}`
+          `[vite-plugin-dotnet-wasm] Copied framework to ${distFramework}`,
         );
       } catch (e) {
         console.error(`[vite-plugin-dotnet-wasm] Failed to copy framework:`, e);
@@ -317,7 +334,7 @@ export default function vitePluginDotnetWasm(
                 return p1 + quote + "./_framework/dotnet.js" + quote;
               }
               return match;
-            }
+            },
           );
           // rewrite: import("..._framework/dotnet.js")
           newCode = newCode.replace(
@@ -327,7 +344,7 @@ export default function vitePluginDotnetWasm(
                 return p1 + quote + "./_framework/dotnet.js" + quote + p4;
               }
               return match;
-            }
+            },
           );
           if (newCode !== chunk.code) {
             chunk.code = newCode;
