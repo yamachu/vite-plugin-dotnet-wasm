@@ -30,14 +30,18 @@
     "url": "https://github.com/yamachu/vite-plugin-dotnet-wasm/issues"
   },
   "homepage": "https://github.com/yamachu/vite-plugin-dotnet-wasm#readme",
-  "keywords": ["vite-plugin", "dotnet", "vite"],
+  "keywords": [
+    "vite-plugin",
+    "dotnet",
+    "vite"
+  ],
   "author": "yamachu",
   "license": "MIT",
-  "packageManager": "pnpm@10.17.1",
+  "packageManager": "pnpm@11.24.0",
   "devDependencies": {
     "@types/node": "24.10.4",
-    "typescript": "5.9.3",
-    "vite": "7.2.6",
+    "typescript": "7.0.2",
+    "vite": "8.2.2",
     "vitest": "4.1.11"
   }
 }
