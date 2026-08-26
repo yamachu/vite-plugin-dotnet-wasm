@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { createDotnetBuildCommand } from "../src/dotnet";
+import { createDotnetCommand } from "../src/dotnet";
 
-describe("createDotnetBuildCommand", () => {
+describe("createDotnetCommand", () => {
   it("creates a build command with optional arguments", () => {
     expect(
-      createDotnetBuildCommand({
+      createDotnetCommand({
         projectFile: "app.csproj",
         projectPath: "/workspace",
         configuration: "Release",
@@ -16,13 +16,19 @@ describe("createDotnetBuildCommand", () => {
       }),
     ).toEqual({
       executable: "dotnet",
-      args: ["build", "app.csproj", "--configuration", "Release", "-p:Foo=bar"],
+      args: [
+        "build",
+        "app.csproj",
+        "--configuration",
+        "Release",
+        "-p:Foo=bar",
+      ],
     });
   });
 
   it("adds watch and publish arguments in dotnet's expected order", () => {
     expect(
-      createDotnetBuildCommand({
+      createDotnetCommand({
         projectFile: "app.csproj",
         projectPath: "/workspace",
         configuration: "Debug",

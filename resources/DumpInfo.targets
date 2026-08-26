@@ -3,7 +3,7 @@
     <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/wwwroot" />
   </Target>
   <Target Name="PrintPublishWwwroot">
-    <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/publish/wwwroot" />
+    <Message Importance="High" Text="publish wwwroot path: bin/$(Configuration)/$(TargetFramework)/publish/wwwroot" />
   </Target>
   <Target
     Name="VitePluginDotnetWasmBuildCompleted"

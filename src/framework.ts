@@ -33,7 +33,9 @@ export function parseWwwrootPath(
   projectPath: string,
   cwd = process.cwd(),
 ): string {
-  const wwwrootMatch = /wwwroot path:\s*(.+?)(?:\r?\n|$)/.exec(output);
+  const wwwrootMatch = /(?:publish )?wwwroot path:\s*(.+?)(?:\r?\n|$)/i.exec(
+    output,
+  );
   if (!wwwrootMatch?.[1]) {
     throw new Error("Failed to detect wwwroot path from msbuild output.");
   }
