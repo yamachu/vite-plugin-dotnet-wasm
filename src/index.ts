@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { searchForWorkspaceRoot } from "vite";
 
-import { spawnDotnet } from "./dotnet.js";
+import { spawnDotnet, stopDotnet } from "./dotnet.js";
 import { getWwwrootPath } from "./framework.js";
 import { rewriteDotnetScriptImportsInBundle } from "./imports.js";
 import { createBuildMarkerDetector } from "./watch-marker.js";
@@ -14,6 +14,25 @@ import { createBuildMarkerDetector } from "./watch-marker.js";
 const pluginDir = dirname(fileURLToPath(import.meta.url));
 const dumpTargets = resolve(pluginDir, "../resources/DumpInfo.targets");
 const buildCompleteMarker = "vite-plugin-dotnet-wasm:build-complete";
+const activeDotnetProcesses = new Set<ChildProcess>();
+
+const stopActiveDotnetProcesses = (signal: NodeJS.Signals) => {
+  for (const dotnetProcess of activeDotnetProcesses) {
+    try {
+      stopDotnet(dotnetProcess);
+    } catch (error) {
+      console.error(
+        `[vite-plugin-dotnet-wasm] Failed to stop dotnet process during ${signal}: ${error}`,
+      );
+    }
+  }
+
+  process.removeAllListeners(signal);
+  process.kill(process.pid, signal);
+};
+
+process.prependListener("SIGINT", () => stopActiveDotnetProcesses("SIGINT"));
+process.prependListener("SIGTERM", () => stopActiveDotnetProcesses("SIGTERM"));
 
 export interface VitePluginDotnetWasmOptions {
   /**
@@ -154,6 +173,8 @@ export default function vitePluginDotnetWasm(
         optionalArgs: dotnetBuildArgs,
         dumpTargets,
       });
+      activeDotnetProcesses.add(dotnetProcess);
+      const spawnedDotnetProcess = dotnetProcess;
 
       const dotnetWatchOutput = createBuildMarkerDetector(
         buildCompleteMarker,
@@ -180,17 +201,27 @@ export default function vitePluginDotnetWasm(
 
       dotnetProcess.on("close", (code) => {
         console.log(`dotnet process exited with code ${code}`);
+        activeDotnetProcesses.delete(spawnedDotnetProcess);
         dotnetProcess = null;
       });
       dotnetProcess.on("error", (err) => {
         console.error(`dotnet process error: ${err}`);
+        activeDotnetProcesses.delete(spawnedDotnetProcess);
         dotnetProcess = null;
       });
 
       server.httpServer?.once("close", () => {
         if (dotnetProcess) {
-          dotnetProcess.kill();
+          const processToStop = dotnetProcess;
+          activeDotnetProcesses.delete(processToStop);
           dotnetProcess = null;
+          try {
+            stopDotnet(processToStop);
+          } catch (error) {
+            console.error(
+              `[vite-plugin-dotnet-wasm] Failed to stop dotnet process: ${error}`,
+            );
+          }
         }
       });
     },
@@ -267,8 +298,9 @@ export default function vitePluginDotnetWasm(
     },
     async closeBundle() {
       if (dotnetProcess) {
-        dotnetProcess.kill();
+        const processToStop = dotnetProcess;
         dotnetProcess = null;
+        await stopDotnet(processToStop);
       }
     },
   };

@@ -1,4 +1,4 @@
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 
 export interface DotnetBuildCommandOptions {
   projectFile: string;
@@ -42,15 +42,30 @@ export function createDotnetCommand(
   return { executable: "dotnet", args };
 }
 
-export function spawnDotnet(
-  options: DotnetBuildCommandOptions,
-): ChildProcess {
+export function spawnDotnet(options: DotnetBuildCommandOptions): ChildProcess {
   const command = createDotnetCommand(options);
 
   return spawn(command.executable, command.args, {
     cwd: options.projectPath,
     stdio: ["ignore", "pipe", "pipe"],
-    shell: true,
     env: { ...process.env },
+    detached: process.platform !== "win32",
   });
+}
+
+export function stopDotnet(childProcess: ChildProcess): void {
+  const { pid } = childProcess;
+  if (pid === undefined) return;
+
+  if (process.platform === "win32") {
+    const result = spawnSync("taskkill", ["/pid", String(pid), "/t", "/f"], {
+      stdio: "ignore",
+    });
+    if (result.status !== 0 && result.status !== 128) {
+      throw new Error(`taskkill failed with exit code ${result.status}`);
+    }
+    return;
+  }
+
+  process.kill(-pid, "SIGKILL");
 }
