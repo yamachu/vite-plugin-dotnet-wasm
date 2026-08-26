@@ -6,7 +6,7 @@ import {
 } from "../src/framework";
 
 describe("wwwroot helpers", () => {
-  it("builds the msbuild command for a normal build", () => {
+  it("builds the msbuild command for the build output", () => {
     expect(
       createWwwrootPathCommand({
         projectPath: "src/app.csproj",
@@ -40,7 +40,7 @@ describe("wwwroot helpers", () => {
   it("keeps absolute output paths unchanged", () => {
     expect(
       parseWwwrootPath(
-        "info\nwwwroot path: /var/www/app/wwwroot\n",
+        "info\npublish wwwroot path: /var/www/app/wwwroot\n",
         "src/app.csproj",
         "/workspace",
       ),

@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { searchForWorkspaceRoot } from "vite";
 
-import { spawnDotnetBuild } from "./dotnet.js";
+import { spawnDotnet } from "./dotnet.js";
 import { getWwwrootPath } from "./framework.js";
 import { rewriteDotnetScriptImportsInBundle } from "./imports.js";
 import { createBuildMarkerDetector } from "./watch-marker.js";
@@ -37,19 +37,15 @@ export interface VitePluginDotnetWasmOptions {
    */
   keepDotnetScriptRelative?: boolean;
   /**
-   * Additional arguments to pass to the 'dotnet build' command.
+   * Additional arguments to pass to the 'dotnet build' or 'dotnet publish' command.
    */
   dotnetBuildArgs?: string[];
   /**
    * Whether to run 'dotnet publish' instead of 'dotnet build'.
-   * When true, the wwwroot path will be resolved from the publish output.
    * @default false
    */
   publish?: boolean;
-  /**
-   * Whether to skip running 'dotnet build' and only copy prebuilt binaries.
-   * @default false
-   */
+  /** Whether to skip running 'dotnet build' or 'dotnet publish'. @default false */
   noBuild?: boolean;
   /**
    * Alias for the framework path used in module resolution.
@@ -67,8 +63,8 @@ export default function vitePluginDotnetWasm(
     watch: watchOption,
     keepDotnetScriptRelative = true,
     dotnetBuildArgs,
-    noBuild = false,
     publish = false,
+    noBuild = false,
     frameworkPathAlias = (wwwroot) => ({
       "./_framework": resolve(wwwroot, "_framework"),
     }),
@@ -149,7 +145,7 @@ export default function vitePluginDotnetWasm(
 
       server = viteServer;
 
-      dotnetProcess = spawnDotnetBuild({
+      dotnetProcess = spawnDotnet({
         projectFile,
         projectPath: projectRoot,
         configuration,
@@ -209,7 +205,7 @@ export default function vitePluginDotnetWasm(
       try {
         if (!noBuild) {
           await new Promise((resolve, reject) => {
-            const proc = spawnDotnetBuild({
+            const proc = spawnDotnet({
               projectFile,
               projectPath: projectRoot,
               configuration,
@@ -221,32 +217,34 @@ export default function vitePluginDotnetWasm(
             proc.stdout?.on("data", (_) => {});
             proc.stderr?.on("data", (data) => {
               console.error(
-                `[vite-plugin-dotnet-wasm] Initial dotnet build error: ${data.toString()}`,
+                `[vite-plugin-dotnet-wasm] Initial dotnet ${publish ? "publish" : "build"} error: ${data.toString()}`,
               );
             });
             proc
               .on("close", (code) => {
                 console.log(
-                  `[vite-plugin-dotnet-wasm] Initial dotnet build process completed with code ${code}`,
+                  `[vite-plugin-dotnet-wasm] Initial dotnet ${publish ? "publish" : "build"} process completed with code ${code}`,
                 );
                 if (code === 0) {
                   resolve({});
                 } else {
                   reject(
-                    new Error(`dotnet build failed with exit code ${code}`),
+                    new Error(
+                      `dotnet ${publish ? "publish" : "build"} failed with exit code ${code}`,
+                    ),
                   );
                 }
               })
               .on("error", (err) => {
                 console.error(
-                  `[vite-plugin-dotnet-wasm] Initial dotnet build process error: ${err}`,
+                  `[vite-plugin-dotnet-wasm] Initial dotnet ${publish ? "publish" : "build"} process error: ${err}`,
                 );
                 reject(err);
               });
           });
         } else {
           console.log(
-            `[vite-plugin-dotnet-wasm] Skipping dotnet build because noBuild=true`,
+            `[vite-plugin-dotnet-wasm] Skipping dotnet ${publish ? "publish" : "build"} because noBuild=true`,
           );
         }
 

@@ -20,12 +20,11 @@ export interface DotnetCommand {
  * Keeping argument construction separate makes it possible to verify command
  * ordering without starting a dotnet process.
  */
-export function createDotnetBuildCommand(
+export function createDotnetCommand(
   options: DotnetBuildCommandOptions,
 ): DotnetCommand {
-  const subcommand = options.publish ? "publish" : "build";
   const args = [
-    subcommand,
+    options.publish ? "publish" : "build",
     options.projectFile,
     "--configuration",
     options.configuration,
@@ -43,10 +42,10 @@ export function createDotnetBuildCommand(
   return { executable: "dotnet", args };
 }
 
-export function spawnDotnetBuild(
+export function spawnDotnet(
   options: DotnetBuildCommandOptions,
 ): ChildProcess {
-  const command = createDotnetBuildCommand(options);
+  const command = createDotnetCommand(options);
 
   return spawn(command.executable, command.args, {
     cwd: options.projectPath,
