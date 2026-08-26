@@ -42,6 +42,7 @@ to the compatibility behavior with `dotnetBuildArgs`:
 dotnetWasm({
   projectPath: "./PATH/TO/PROJECT.csproj",
   dotnetBuildArgs: [
+    "--",
     "-p:_WasmFrameworkCopyToOutputDirectory=PreserveNewest",
   ],
 });
