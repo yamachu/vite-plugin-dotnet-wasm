@@ -1,10 +1,15 @@
-import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { cp } from "node:fs/promises";
-import { basename, dirname, isAbsolute, resolve } from "node:path";
+import type { ChildProcess } from "node:child_process";
+import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { searchForWorkspaceRoot } from "vite";
+
+import { spawnDotnetBuild } from "./dotnet.js";
+import { getWwwrootPath } from "./framework.js";
+import { rewriteDotnetScriptImportsInBundle } from "./imports.js";
+import { createBuildMarkerDetector } from "./watch-marker.js";
 
 const pluginDir = dirname(fileURLToPath(import.meta.url));
 const dumpTargets = resolve(pluginDir, "../resources/DumpInfo.targets");
@@ -53,82 +58,6 @@ export interface VitePluginDotnetWasmOptions {
   frameworkPathAlias?: (wwwroot: string) => { [alias: string]: string };
 }
 
-const createDotnetBuildProcess = (
-  projectFile: string,
-  projectPath: string,
-  configuration: string,
-  watch: boolean,
-  publish: boolean,
-  optionalArgs?: string[],
-): ChildProcess => {
-  const subcommand = publish ? "publish" : "build";
-  const args = [
-    subcommand,
-    projectFile,
-    "--configuration",
-    configuration,
-    ...(optionalArgs ?? []),
-  ];
-
-  if (watch) {
-    args.unshift("watch", "--non-interactive");
-    args.push(
-      `-property:CustomAfterMicrosoftCommonTargets=${dumpTargets}`,
-      `-property:VitePluginDotnetWasmReloadAfterTargets=${publish ? "Publish" : "Build"}`,
-    );
-  }
-
-  return spawn("dotnet", args, {
-    cwd: projectPath,
-    stdio: ["ignore", "pipe", "pipe"],
-    shell: true,
-    env: { ...process.env },
-  });
-};
-
-const getWwwRootPath = (
-  projectPath: string,
-  configuration: string,
-  publish: boolean,
-): string => {
-  const cwd = process.cwd();
-
-  const target = publish ? "PrintPublishWwwroot" : "PrintWwwroot";
-
-  const { error, output } = spawnSync(
-    "dotnet",
-    [
-      "msbuild",
-      projectPath,
-      `-property:Configuration=${configuration}`,
-      `-property:CustomAfterMicrosoftCommonTargets=${dumpTargets}`,
-      `-t:${target}`,
-      "-v:d",
-    ],
-    {
-      cwd,
-      stdio: ["ignore", "pipe", "pipe"],
-      shell: true,
-    },
-  );
-  if (error) {
-    throw error;
-  }
-  const stdout = output.toString();
-  const wwwrootMatch = /wwwroot path:\s*(.+)\s*/.exec(stdout);
-  if (wwwrootMatch && wwwrootMatch[1]) {
-    const matched = wwwrootMatch[1];
-    if (isAbsolute(matched)) {
-      return matched;
-    }
-
-    const projDirName = dirname(projectPath);
-    return resolve(cwd, projDirName, matched);
-  } else {
-    throw new Error("Failed to detect wwwroot path from msbuild output.");
-  }
-};
-
 export default function vitePluginDotnetWasm(
   options: VitePluginDotnetWasmOptions,
 ): Plugin {
@@ -158,7 +87,12 @@ export default function vitePluginDotnetWasm(
 
     config(prevConfig) {
       try {
-        wwwroot = getWwwRootPath(projectPath, configuration, publish);
+        wwwroot = getWwwrootPath({
+          projectPath,
+          configuration,
+          publish,
+          dumpTargets,
+        });
       } catch (e) {
         console.error(
           `[vite-plugin-dotnet-wasm] Failed to detect wwwroot path: ${e}`,
@@ -215,41 +149,37 @@ export default function vitePluginDotnetWasm(
 
       server = viteServer;
 
-      dotnetProcess = createDotnetBuildProcess(
+      dotnetProcess = spawnDotnetBuild({
         projectFile,
-        projectRoot,
+        projectPath: projectRoot,
         configuration,
-        watchOption ?? config.command === "serve",
+        watch: watchOption ?? config.command === "serve",
         publish,
-        dotnetBuildArgs,
-      );
+        optionalArgs: dotnetBuildArgs,
+        dumpTargets,
+      });
 
-      let dotnetWatchOutput = "";
-      const handleDotnetWatchOutput = (text: string) => {
-        const output = `${dotnetWatchOutput}${text}`;
-
-        if (output.includes(buildCompleteMarker)) {
+      const dotnetWatchOutput = createBuildMarkerDetector(
+        buildCompleteMarker,
+        () => {
           console.log(
             `[vite-plugin-dotnet-wasm] Build succeeded, triggering Vite server reload...`,
           );
           server.ws.send({
             type: "full-reload",
           });
-          dotnetWatchOutput = "";
-        } else {
-          dotnetWatchOutput = output.slice(-(buildCompleteMarker.length - 1));
-        }
-      };
+        },
+      );
 
       dotnetProcess.stdout?.on("data", (data) => {
         const text = data.toString();
         process.stdout.write(`[dotnet] ${text}`);
-        handleDotnetWatchOutput(text);
+        dotnetWatchOutput.push(text);
       });
       dotnetProcess.stderr?.on("data", (data) => {
         const text = data.toString();
         process.stderr.write(`[dotnet] ${text}`);
-        handleDotnetWatchOutput(text);
+        dotnetWatchOutput.push(text);
       });
 
       dotnetProcess.on("close", (code) => {
@@ -279,14 +209,15 @@ export default function vitePluginDotnetWasm(
       try {
         if (!noBuild) {
           await new Promise((resolve, reject) => {
-            const proc = createDotnetBuildProcess(
+            const proc = spawnDotnetBuild({
               projectFile,
-              projectRoot,
+              projectPath: projectRoot,
               configuration,
-              false,
+              watch: false,
               publish,
-              dotnetBuildArgs,
-            );
+              optionalArgs: dotnetBuildArgs,
+              dumpTargets,
+            });
             proc.stdout?.on("data", (_) => {});
             proc.stderr?.on("data", (data) => {
               console.error(
@@ -334,38 +265,7 @@ export default function vitePluginDotnetWasm(
         return;
       }
 
-      // FIXME: Improve the rewriting logic to handle various import styles more robustly...
-      // TODO: Add tests for this rewriting logic.
-      for (const fileName of Object.keys(bundle)) {
-        const chunk = bundle[fileName];
-        if (chunk && chunk.type === "chunk" && typeof chunk.code === "string") {
-          let newCode = chunk.code;
-
-          // rewrite: import ... from "..."
-          newCode = newCode.replace(
-            /(import\s*[^;]*?from\s*)(["'])([^"']*_framework\/dotnet\.js)\2/g,
-            (match, p1, quote, importPath) => {
-              if (!importPath.startsWith("./_framework/dotnet.js")) {
-                return p1 + quote + "./_framework/dotnet.js" + quote;
-              }
-              return match;
-            },
-          );
-          // rewrite: import("..._framework/dotnet.js")
-          newCode = newCode.replace(
-            /(import\s*\(\s*)(["'])([^"']*_framework\/dotnet\.js)\2(\s*\))/g,
-            (match, p1, quote, importPath, p4) => {
-              if (!importPath.startsWith("./_framework/dotnet.js")) {
-                return p1 + quote + "./_framework/dotnet.js" + quote + p4;
-              }
-              return match;
-            },
-          );
-          if (newCode !== chunk.code) {
-            chunk.code = newCode;
-          }
-        }
-      }
+      rewriteDotnetScriptImportsInBundle(bundle);
     },
     async closeBundle() {
       if (dotnetProcess) {
