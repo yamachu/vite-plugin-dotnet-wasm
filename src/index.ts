@@ -8,6 +8,7 @@ import { searchForWorkspaceRoot } from "vite";
 
 const pluginDir = dirname(fileURLToPath(import.meta.url));
 const dumpTargets = resolve(pluginDir, "../resources/DumpInfo.targets");
+const buildCompleteMarker = "vite-plugin-dotnet-wasm:build-complete";
 
 export interface VitePluginDotnetWasmOptions {
   /**
@@ -71,6 +72,10 @@ const createDotnetBuildProcess = (
 
   if (watch) {
     args.unshift("watch", "--non-interactive");
+    args.push(
+      `-property:CustomAfterMicrosoftCommonTargets=${dumpTargets}`,
+      `-property:VitePluginDotnetWasmReloadAfterTargets=${publish ? "Publish" : "Build"}`,
+    );
   }
 
   return spawn("dotnet", args, {
@@ -219,22 +224,32 @@ export default function vitePluginDotnetWasm(
         dotnetBuildArgs,
       );
 
-      dotnetProcess.stdout?.on("data", (data) => {
-        const text = data.toString();
-        process.stdout.write(`[dotnet] ${text}`);
-      });
-      dotnetProcess.stderr?.on("data", (data) => {
-        const text = data.toString();
-        process.stderr.write(`[dotnet] ${text}\n`);
+      let dotnetWatchOutput = "";
+      const handleDotnetWatchOutput = (text: string) => {
+        const output = `${dotnetWatchOutput}${text}`;
 
-        if (text.includes("Waiting for a file to change before restarting")) {
+        if (output.includes(buildCompleteMarker)) {
           console.log(
             `[vite-plugin-dotnet-wasm] Build succeeded, triggering Vite server reload...`,
           );
           server.ws.send({
             type: "full-reload",
           });
+          dotnetWatchOutput = "";
+        } else {
+          dotnetWatchOutput = output.slice(-(buildCompleteMarker.length - 1));
         }
+      };
+
+      dotnetProcess.stdout?.on("data", (data) => {
+        const text = data.toString();
+        process.stdout.write(`[dotnet] ${text}`);
+        handleDotnetWatchOutput(text);
+      });
+      dotnetProcess.stderr?.on("data", (data) => {
+        const text = data.toString();
+        process.stderr.write(`[dotnet] ${text}`);
+        handleDotnetWatchOutput(text);
       });
 
       dotnetProcess.on("close", (code) => {

@@ -5,4 +5,10 @@
   <Target Name="PrintPublishWwwroot">
     <Message Importance="High" Text="wwwroot path: bin/$(Configuration)/$(TargetFramework)/publish/wwwroot" />
   </Target>
+  <Target
+    Name="VitePluginDotnetWasmBuildCompleted"
+    AfterTargets="$(VitePluginDotnetWasmReloadAfterTargets)"
+    Condition="'$(VitePluginDotnetWasmReloadAfterTargets)' != ''">
+    <Message Importance="High" Text="vite-plugin-dotnet-wasm:build-complete" />
+  </Target>
 </Project>
