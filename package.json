@@ -19,6 +19,7 @@
   ],
   "scripts": {
     "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
     "prepare": "npm run build"
   },
   "repository": {
@@ -36,6 +37,7 @@
   "devDependencies": {
     "@types/node": "24.10.4",
     "typescript": "5.9.3",
-    "vite": "7.2.6"
+    "vite": "7.2.6",
+    "vitest": "4.1.11"
   }
 }
