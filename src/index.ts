@@ -7,7 +7,7 @@ import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
 import { searchForWorkspaceRoot } from "vite";
 
 import { spawnDotnet, stopDotnet } from "./dotnet.js";
-import { getWwwrootPath } from "./framework.js";
+import { getOutputDir } from "./framework.js";
 import { rewriteDotnetScriptImportsInBundle } from "./imports.js";
 import { createBuildMarkerDetector } from "./watch-marker.js";
 
@@ -102,12 +102,10 @@ export default function vitePluginDotnetWasm(
 
     config(prevConfig) {
       try {
-        wwwroot = getWwwrootPath({
-          projectPath,
-          configuration,
-          publish,
-          dumpTargets,
-        });
+        wwwroot = resolve(
+          getOutputDir({ projectPath, configuration, publish, dumpTargets }),
+          "wwwroot",
+        );
       } catch (e) {
         console.error(
           `[vite-plugin-dotnet-wasm] Failed to detect wwwroot path: ${e}`,
