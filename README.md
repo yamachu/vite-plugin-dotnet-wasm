@@ -34,23 +34,29 @@ export default defineConfig({
 
 And, see example project in the `examples/` folder.
 
-For .NET 11 projects using the default `build` mode, framework assets are no
-longer copied to `bin` by default. Until `publish` becomes the default, opt in
-to the compatibility behavior with `dotnetBuildArgs`:
+## How framework assets are resolved
 
-```ts
-dotnetWasm({
-  projectPath: "./PATH/TO/PROJECT.csproj",
-  dotnetBuildArgs: [
-    "--",
-    "-p:_WasmFrameworkCopyToOutputDirectory=PreserveNewest",
-  ],
-});
-```
+The plugin reads the .NET SDK's static web assets manifest
+(`{Project}.staticwebassets.runtime.json`) and stages every asset it declares
+into `<cacheDir>/dotnet-wasm/<project>-<configuration>-<build|publish>`
+(under `node_modules/.vite` by default), one directory per plugin instance.
+`./_framework/*` imports resolve from there in dev, and the staged directory is
+what gets copied next to the bundle on build.
 
-`_WasmFrameworkCopyToOutputDirectory` is an internal .NET SDK property and may
-change or be removed in a future SDK release. Prefer `publish: true` for new
-projects.
+This is the approach the .NET team recommends for external bundlers
+([dotnet/runtime#132789](https://github.com/dotnet/runtime/issues/132789)). It
+means:
+
+- `dotnet build` output works on .NET 11, where framework assets are no longer
+  copied to `bin/wwwroot`. No `_WasmFrameworkCopyToOutputDirectory` workaround
+  is needed - that property is internal to the SDK and should not be used.
+- Assets that never lived in `bin/wwwroot` - your project's own `wwwroot`, static
+  files from NuGet packages - are picked up too.
+- Fingerprinted file names resolve as-is.
+
+When no manifest is present - `dotnet publish` output, which is already
+consolidated, or an SDK that predates the manifest - the plugin falls back to
+reading the wwwroot directly, so nothing needs configuring either way.
 
 ## LICENSE
 
