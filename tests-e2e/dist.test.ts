@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,12 +6,17 @@ import { chromium, type Browser, type Page } from "playwright";
 import { build, preview, type PreviewServer } from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
+import dotnetWasm from "../src/index";
+
 /**
  * The one test that exercises the whole chain: dotnet build/publish, the
  * framework copy into dist, the rewritten dotnet.js import, and the .NET
  * runtime actually booting from those files in a browser.
  *
  * The unit tests cover pure functions; nothing else proves a built dist runs.
+ * The plugin is imported from src so the suite cannot silently test a stale
+ * dist, and so it needs no shelling out to npm - which would not work on
+ * Windows, where npm is a .cmd that execFile cannot launch.
  * Both output layouts are covered because they take different paths through the
  * plugin: build output is staged from the SDK manifest, while publish output is
  * consolidated already and read straight from the wwwroot. Publish also trims,
@@ -29,11 +33,6 @@ const elapsedPattern = /^\d{2}:\d{2}$/;
 
 const bootedSelector = () =>
   /^\d{2}:\d{2}$/.test(document.querySelector("#time")?.textContent ?? "");
-
-beforeAll(() => {
-  // The plugin is loaded from dist/, so a stale build would test old code.
-  execFileSync("npm", ["run", "build"], { cwd: repoRoot, stdio: "inherit" });
-}, 300_000);
 
 const outputModes = [
   { name: "dotnet build", publish: false, outDir: "dist-e2e-build", port: 5211 },
@@ -74,8 +73,6 @@ describe.each(outputModes)(
     };
 
     beforeAll(async () => {
-      const { default: dotnetWasm } = await import("../dist/index.js");
-
       rmSync(distDir, { recursive: true, force: true });
       await build({
         root: appDir,
