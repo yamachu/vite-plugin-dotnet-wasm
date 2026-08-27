@@ -4,11 +4,13 @@ import { basename, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Plugin, ResolvedConfig, ViteDevServer } from "vite";
-import { searchForWorkspaceRoot } from "vite";
+import { normalizePath, searchForWorkspaceRoot } from "vite";
 
 import { spawnDotnet, stopDotnet } from "./dotnet.js";
 import { getOutputDir } from "./framework.js";
 import { rewriteDotnetScriptImportsInBundle } from "./imports.js";
+import { findRuntimeManifest, readManifestAssets } from "./manifest.js";
+import { materializeAssets } from "./materialize.js";
 import { createBuildMarkerDetector } from "./watch-marker.js";
 
 const pluginDir = dirname(fileURLToPath(import.meta.url));
@@ -68,9 +70,37 @@ export interface VitePluginDotnetWasmOptions {
   noBuild?: boolean;
   /**
    * Alias for the framework path used in module resolution.
-   * @default (wwwroot) => ({ "./_framework": resolve(wwwroot, "_framework") })
+   *
+   * @deprecated Framework assets are resolved from a staging directory built
+   * out of the SDK's static web assets manifest, so an alias onto the wwwroot
+   * can no longer see every asset. Setting this keeps the old wwwroot-only
+   * behavior for now; it will be removed in a future release.
    */
   frameworkPathAlias?: (wwwroot: string) => { [alias: string]: string };
+}
+
+/** Import prefix the .NET SDK emits in `dotnet.js` and in app code. */
+const frameworkImportPrefix = "./_framework/";
+
+/**
+ * Name the staging directory after what was built into it.
+ *
+ * Two plugin instances in one Vite config - or one project built two ways -
+ * share a cacheDir, and staging prunes whatever it does not expect, so a shared
+ * directory would have them deleting each other's assets on every build.
+ */
+export function createStagingKey(options: {
+  projectPath: string;
+  configuration: string;
+  publish: boolean;
+}): string {
+  const project = basename(options.projectPath).replace(/\.[^.]+$/, "");
+  const suffix = options.publish ? "publish" : "build";
+
+  return `${project}-${options.configuration}-${suffix}`.replace(
+    /[^A-Za-z0-9._-]/g,
+    "_",
+  );
 }
 
 export default function vitePluginDotnetWasm(
@@ -84,51 +114,139 @@ export default function vitePluginDotnetWasm(
     dotnetBuildArgs,
     publish = false,
     noBuild = false,
-    frameworkPathAlias = (wwwroot) => ({
-      "./_framework": resolve(wwwroot, "_framework"),
-    }),
+    frameworkPathAlias,
   } = options;
+
+  // Setting the deprecated option opts out of the manifest-backed staging
+  // directory entirely: an alias and a resolveId hook would otherwise fight
+  // over the same specifiers.
+  const useLegacyAlias = frameworkPathAlias !== undefined;
 
   let server: ViteDevServer;
   let config: ResolvedConfig;
   let dotnetProcess: ChildProcess | null = null;
-  let wwwroot: string;
   let projectFile: string;
   let projectRoot: string;
+  /** Directory that holds `_framework`: the staging dir, or the wwwroot. */
+  let frameworkRoot: string;
+  let stagingDir: string | null = null;
+  let outputDir: string | null = null;
+
+  /**
+   * The .NET output directory, resolved once and only when needed. Resolving it
+   * can spawn MSBuild, so nothing should ask for it during `config()`.
+   */
+  const getOutput = (): string => {
+    outputDir ??= getOutputDir({
+      projectPath,
+      configuration,
+      publish,
+      dumpTargets,
+    });
+
+    return outputDir;
+  };
+
+  const getWwwroot = (): string =>
+    normalizePath(resolve(getOutput(), "wwwroot"));
+
+  /**
+   * Let the dev server read a directory the framework was resolved into.
+   * Paths are compared POSIX-style because that is how Vite stores them.
+   */
+  const allowServing = (directory: string): void => {
+    const allow = config?.server.fs.allow;
+    if (allow === undefined) {
+      return;
+    }
+    const normalized = normalizePath(directory);
+    if (!allow.some((allowed) => normalized.startsWith(normalizePath(allowed)))) {
+      allow.push(normalized);
+    }
+  };
+
+  /**
+   * Bring the staging directory in line with the current .NET output.
+   *
+   * `dotnet build` scatters assets across obj/, so the manifest is the only way
+   * to find them all; `dotnet publish` consolidates them and emits no manifest,
+   * in which case the wwwroot is already what we need and is used directly.
+   */
+  const syncFrameworkRoot = (): void => {
+    if (stagingDir === null) {
+      return;
+    }
+
+    // Earlier releases allowed serving the output wwwroot's _framework
+    // directly. Nothing the plugin resolves needs that any more, but keeping it
+    // permitted costs nothing and cannot break someone who reached for it.
+    allowServing(resolve(getOutput(), "wwwroot", "_framework"));
+
+    const manifestPath = findRuntimeManifest(getOutput());
+    if (manifestPath === null) {
+      // publish output, or an SDK too old to emit a manifest: the wwwroot is
+      // already consolidated, so serve it where it lies.
+      frameworkRoot = getWwwroot();
+      allowServing(frameworkRoot);
+      return;
+    }
+
+    const { written, unchanged, removed } = materializeAssets(
+      readManifestAssets(manifestPath),
+      stagingDir,
+    );
+    frameworkRoot = stagingDir;
+
+    if (written > 0 || removed > 0) {
+      console.log(
+        `[vite-plugin-dotnet-wasm] Staged ${written} changed and removed ${removed} stale framework assets (${unchanged} unchanged).`,
+      );
+    }
+  };
+
+  /** Drop transformed copies of staged files so a rebuild is actually served. */
+  const invalidateStagedModules = (): void => {
+    const moduleGraph =
+      server?.environments?.["client"]?.moduleGraph ?? server?.moduleGraph;
+    if (moduleGraph === undefined) {
+      return;
+    }
+
+    for (const [id, module] of moduleGraph.idToModuleMap) {
+      if (id.startsWith(frameworkRoot)) {
+        moduleGraph.invalidateModule(module);
+      }
+    }
+  };
 
   return {
     name: "vite-plugin-dotnet-wasm",
     enforce: "pre",
 
     config(prevConfig) {
-      try {
-        wwwroot = resolve(
-          getOutputDir({ projectPath, configuration, publish, dumpTargets }),
-          "wwwroot",
-        );
-      } catch (e) {
-        console.error(
-          `[vite-plugin-dotnet-wasm] Failed to detect wwwroot path: ${e}`,
-        );
-      }
-
       projectFile = basename(projectPath);
       projectRoot = resolve(process.cwd(), dirname(projectPath));
+
+      // Only the deprecated path needs the wwwroot this early, and only it pays
+      // for resolving the output directory before the dev server starts.
+      let legacyAlias: { [alias: string]: string } = {};
+      if (useLegacyAlias) {
+        console.warn(
+          `[vite-plugin-dotnet-wasm] 'frameworkPathAlias' is deprecated and keeps the plugin on the wwwroot, ` +
+            `which no longer holds every framework asset on .NET 11. Remove it to resolve assets from the SDK manifest.`,
+        );
+        legacyAlias = frameworkPathAlias(getWwwroot());
+      }
 
       const prevExternal = prevConfig.build?.rollupOptions?.external;
 
       return {
         resolve: {
-          alias: {
-            ...frameworkPathAlias(wwwroot),
-          },
+          alias: legacyAlias,
         },
         server: {
           fs: {
-            allow: [
-              searchForWorkspaceRoot(process.cwd()),
-              resolve(wwwroot, "_framework"),
-            ],
+            allow: [searchForWorkspaceRoot(process.cwd())],
           },
         },
 
@@ -154,6 +272,45 @@ export default function vitePluginDotnetWasm(
 
     async configResolved(resolvedConfig: ResolvedConfig): Promise<void> {
       config = resolvedConfig;
+
+      if (useLegacyAlias) {
+        frameworkRoot = getWwwroot();
+        allowServing(frameworkRoot);
+        return;
+      }
+
+      // cacheDir is only known once Vite has resolved it, which is why the
+      // framework path is intercepted in resolveId rather than through an
+      // alias: aliases have to be declared before this point.
+      stagingDir = normalizePath(
+        resolve(
+          config.cacheDir,
+          "dotnet-wasm",
+          createStagingKey({ projectPath, configuration, publish }),
+        ),
+      );
+
+      // cacheDir normally sits under the workspace root and is already
+      // servable, but it is configurable and the root need not be the cwd.
+      allowServing(stagingDir);
+
+      // The output may already be there from an earlier run; anything missing
+      // is staged again after each successful build.
+      try {
+        syncFrameworkRoot();
+      } catch (error) {
+        console.error(
+          `[vite-plugin-dotnet-wasm] Failed to stage framework assets: ${error}`,
+        );
+      }
+    },
+
+    resolveId(source) {
+      if (stagingDir === null || !source.startsWith(frameworkImportPrefix)) {
+        return;
+      }
+
+      return normalizePath(resolve(frameworkRoot, source.slice("./".length)));
     },
 
     async configureServer(viteServer) {
@@ -180,6 +337,17 @@ export default function vitePluginDotnetWasm(
           console.log(
             `[vite-plugin-dotnet-wasm] Build succeeded, triggering Vite server reload...`,
           );
+          try {
+            // Restage before the reload: the browser refetches immediately, and
+            // the staging directory sits in cacheDir where Vite's watcher does
+            // not look, so nothing else would invalidate the old copies.
+            syncFrameworkRoot();
+            invalidateStagedModules();
+          } catch (error) {
+            console.error(
+              `[vite-plugin-dotnet-wasm] Failed to stage framework assets: ${error}`,
+            );
+          }
           server.ws.send({
             type: "full-reload",
           });
@@ -277,7 +445,10 @@ export default function vitePluginDotnetWasm(
           );
         }
 
-        await cp(resolve(wwwroot, "_framework"), distFramework, {
+        // The build just wrote new output, so the staging directory is stale.
+        syncFrameworkRoot();
+
+        await cp(resolve(frameworkRoot, "_framework"), distFramework, {
           recursive: true,
         });
 
