@@ -32,8 +32,13 @@ jobs:
 
   e2e:
     # Drives a real dotnet build and a browser, so it is kept separate from the
-    # unit job: a failure here means a built dist would not boot.
-    runs-on: ubuntu-latest
+    # unit job: a failure here means a built dist would not boot. Run on both
+    # platforms, since this is where path handling is actually exercised.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -61,7 +66,13 @@ jobs:
         run: pnpm install
         working-directory: examples/my-javascript-app
 
-      - name: Install Chromium
+      # --with-deps installs OS packages and only applies to Linux.
+      - name: Install Chromium (Linux)
+        if: runner.os == 'Linux'
         run: pnpm exec playwright install --with-deps chromium
+
+      - name: Install Chromium
+        if: runner.os != 'Linux'
+        run: pnpm exec playwright install chromium
 
       - run: pnpm run test:e2e
