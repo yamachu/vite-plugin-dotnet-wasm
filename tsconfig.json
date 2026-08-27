@@ -39,5 +39,13 @@
     "moduleDetection": "force",
     "skipLibCheck": true,
   },
-  "exclude": ["examples", "dist", "docs", "tests", "vitest.config.ts"]
+  "exclude": [
+    "examples",
+    "dist",
+    "docs",
+    "tests",
+    "tests-e2e",
+    "vitest.config.ts",
+    "vitest.e2e.config.ts"
+  ]
 }

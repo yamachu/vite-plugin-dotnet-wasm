@@ -6,6 +6,7 @@ export default defineConfig({
   plugins: [
     dotnetWasm({
       projectPath: "./dotnet-wasm/dotnet-wasm.csproj",
+      publish: true,
     }),
   ],
 });
