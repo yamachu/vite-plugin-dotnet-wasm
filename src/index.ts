@@ -456,7 +456,11 @@ export default function vitePluginDotnetWasm(
           `[vite-plugin-dotnet-wasm] Copied framework to ${distFramework}`,
         );
       } catch (e) {
-        console.error(`[vite-plugin-dotnet-wasm] Failed to copy framework:`, e);
+        // Failing the build beats emitting a dist whose _framework is missing
+        // or stale: that only shows up as a blank page at runtime.
+        this.error(
+          `[vite-plugin-dotnet-wasm] Failed to produce the framework output: ${e instanceof Error ? e.message : e}`,
+        );
       }
 
       if (!keepDotnetScriptRelative) {
